@@ -1,0 +1,57 @@
+/*
+ * Design tokens for the Leather Pattern Studio UI kit.
+ *
+ * Centralising these (instead of each component picking its own colour)
+ * is the whole point of a component layer like this one or Canonical's
+ * Vanilla Framework: change a value here and every product built on the
+ * kit stays consistent. Values are chosen to hold WCAG 2.1 AA contrast
+ * (>= 4.5:1 for text, >= 3:1 for the focus ring against its background)
+ * against both --lps-color-surface and white.
+ */
+:root {
+  /* Brand */
+  --lps-color-leather: #7a3b1e;
+  --lps-color-leather-dark: #5c2c16;
+  --lps-color-stitch: #b5542d;
+
+  /* Neutrals */
+  --lps-color-ink: #221c1a;
+  --lps-color-ink-muted: #5b5250;
+  --lps-color-surface: #fbf8f5;
+  --lps-color-border: #d8cfc7;
+
+  /* Feedback */
+  --lps-color-danger: #a3291f;
+  --lps-color-success: #2f6d3c;
+
+  /* Focus ring: visible on both light surfaces and the leather brand
+     colour, 3px solid offset outline per WCAG 2.4.7 */
+  --lps-focus-ring: 0 0 0 3px #ffffff, 0 0 0 5px var(--lps-color-leather-dark);
+
+  --lps-radius-sm: 4px;
+  --lps-radius-md: 8px;
+  --lps-space-1: 4px;
+  --lps-space-2: 8px;
+  --lps-space-3: 16px;
+  --lps-space-4: 24px;
+
+  --lps-font-sans: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --lps-color-ink: #f2ece7;
+    --lps-color-ink-muted: #c8bdb6;
+    --lps-color-surface: #221c1a;
+    --lps-color-border: #4a3f3a;
+    --lps-focus-ring: 0 0 0 3px #221c1a, 0 0 0 5px #e8c9b4;
+  }
+}
+
+/* Respect a user's reduced-motion preference everywhere in the kit. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+}

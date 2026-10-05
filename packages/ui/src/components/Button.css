@@ -1,0 +1,42 @@
+.lps-button {
+  font-family: var(--lps-font-sans);
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: var(--lps-space-2) var(--lps-space-3);
+  border-radius: var(--lps-radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.lps-button:focus-visible {
+  outline: none;
+  box-shadow: var(--lps-focus-ring);
+}
+
+.lps-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.lps-button--primary {
+  background: var(--lps-color-leather);
+  color: #fff;
+}
+.lps-button--primary:hover:not(:disabled) {
+  background: var(--lps-color-leather-dark);
+}
+
+.lps-button--secondary {
+  background: transparent;
+  color: var(--lps-color-leather-dark);
+  border-color: var(--lps-color-border);
+}
+.lps-button--secondary:hover:not(:disabled) {
+  background: var(--lps-color-surface);
+}
+
+.lps-button--danger {
+  background: var(--lps-color-danger);
+  color: #fff;
+}

@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api:
+    name: API + geometry (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install API + shared geometry package
+        working-directory: apps/api
+        run: pip install -r requirements.txt
+      - name: Run pytest (includes the shared cross-language fixture check)
+        working-directory: apps/api
+        run: pytest -q
+
+  ui-kit:
+    name: Accessible component library (packages/ui)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - working-directory: packages/ui
+        run: npm install
+      - name: Run Vitest + jest-axe accessibility checks
+        working-directory: packages/ui
+        run: npm test
+
+  web:
+    name: Web app (apps/web)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # apps/web imports the UI kit straight from source via a Vite
+      # alias, so packages/ui needs its own node_modules (for `react`)
+      # present too — see apps/web/vite.config.ts.
+      - working-directory: packages/ui
+        run: npm install
+      - working-directory: apps/web
+        run: npm install
+      - name: Run Vitest (includes the shared cross-language fixture check)
+        working-directory: apps/web
+        run: npm test
+      - name: Type-check
+        working-directory: apps/web
+        run: npx tsc -b --noEmit || npx tsc --noEmit
+
+  flutter:
+    name: Flutter companion app (apps/mobile_flutter)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.22.0"
+          channel: "stable"
+      - working-directory: apps/mobile_flutter
+        run: flutter pub get
+      - name: Analyze
+        working-directory: apps/mobile_flutter
+        run: flutter analyze
+      - name: Widget tests
+        working-directory: apps/mobile_flutter
+        run: flutter test

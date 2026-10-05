@@ -1,0 +1,4 @@
+-e ../../packages/core_py
+psycopg2-binary>=2.9,<3.0
+redis>=5.0,<6.0
+rq>=1.16,<2.0

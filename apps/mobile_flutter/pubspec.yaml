@@ -1,0 +1,25 @@
+name: lps_companion
+description: >
+  Leather Pattern Studio companion viewer — a small, honest first step
+  into Flutter. Fetches a saved pattern from the same REST API the web
+  app uses and renders its SVG export, read-only.
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.16.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.0
+  flutter_svg: ^2.0.10+1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

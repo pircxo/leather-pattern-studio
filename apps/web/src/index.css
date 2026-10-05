@@ -1,0 +1,27 @@
+body {
+  margin: 0;
+  background: var(--lps-color-surface, #fbf8f5);
+  color: var(--lps-color-ink, #221c1a);
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+a {
+  color: var(--lps-color-leather-dark, #5c2c16);
+}
+
+/* Skip link: visually hidden until focused, so keyboard users can jump
+   straight past the repeated header controls to the main content. */
+.lps-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+}
+.lps-skip-link:focus {
+  left: var(--lps-space-2, 8px);
+  top: var(--lps-space-2, 8px);
+  background: #fff;
+  padding: var(--lps-space-2, 8px) var(--lps-space-3, 16px);
+  border-radius: var(--lps-radius-sm, 4px);
+  box-shadow: var(--lps-focus-ring, 0 0 0 3px #fff, 0 0 0 5px #5c2c16);
+  z-index: 10;
+}

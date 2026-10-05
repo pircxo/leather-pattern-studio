@@ -1,0 +1,59 @@
+.lps-swatches {
+  border: none;
+  padding: 0;
+  margin: 0 0 var(--lps-space-3) 0;
+  font-family: var(--lps-font-sans);
+}
+
+.lps-swatches__legend {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--lps-color-ink);
+  padding: 0;
+  margin-bottom: var(--lps-space-2);
+}
+
+.lps-swatches__row {
+  display: flex;
+  gap: var(--lps-space-2);
+  flex-wrap: wrap;
+}
+
+.lps-swatches__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  color: var(--lps-color-ink-muted);
+}
+
+.lps-swatches__swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--lps-color-border);
+  display: block;
+}
+
+/* Visually hidden, but still focusable, present to AT, and clickable via
+   its associated <label> — the standard "sr-only but functional" pattern,
+   not display:none (which would remove it from the accessibility tree and
+   tab order entirely). */
+.lps-swatches__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lps-swatches__input:checked + .lps-swatches__swatch {
+  border-color: var(--lps-color-leather-dark);
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--lps-color-leather-dark);
+}
+
+.lps-swatches__input:focus-visible + .lps-swatches__swatch {
+  box-shadow: var(--lps-focus-ring);
+}

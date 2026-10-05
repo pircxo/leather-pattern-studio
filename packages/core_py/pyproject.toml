@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lps-core"
+version = "0.1.0"
+description = "Shared domain logic for Leather Pattern Studio: geometry engine, ORM models, DB session, export jobs. Used by both apps/api and apps/worker so the two services never duplicate business logic."
+requires-python = ">=3.11"
+dependencies = [
+    "SQLAlchemy>=2.0,<3.0",
+    "pydantic>=2.5,<3.0",
+    "svgwrite>=1.4,<2.0",
+    "reportlab>=4.0,<5.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["core_py*"]

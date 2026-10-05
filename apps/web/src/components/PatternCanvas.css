@@ -1,0 +1,43 @@
+.lps-canvas {
+  margin: 0;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lps-space-2);
+  background: #fff;
+  border: 1px solid var(--lps-color-border);
+  border-radius: var(--lps-radius-md);
+  padding: var(--lps-space-3);
+}
+
+.lps-canvas__svg {
+  width: min(420px, 100%);
+  height: auto;
+}
+
+.lps-canvas__cut {
+  stroke: var(--lps-color-ink);
+  stroke-width: 1.5;
+  fill-opacity: 0.18;
+}
+
+.lps-canvas__stitch {
+  stroke: var(--lps-color-stitch);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.lps-canvas__caption {
+  font-family: var(--lps-font-sans);
+  font-size: 0.8rem;
+  color: var(--lps-color-ink-muted);
+  text-align: center;
+}
+
+.lps-canvas__warning {
+  font-family: var(--lps-font-sans);
+  font-size: 0.78rem;
+  color: var(--lps-color-danger);
+  margin: 0;
+  text-align: center;
+}

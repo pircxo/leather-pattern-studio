@@ -1,0 +1,35 @@
+## Node / web
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+*.log
+
+## Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+instance/
+*.db
+*.sqlite3
+
+## Flutter
+apps/mobile_flutter/.dart_tool/
+apps/mobile_flutter/.flutter-plugins
+apps/mobile_flutter/.flutter-plugins-dependencies
+apps/mobile_flutter/build/
+apps/mobile_flutter/.packages
+
+## Editors / OS
+.DS_Store
+.vscode/
+.idea/
+
+## Env
+.env
+.env.local

@@ -1,0 +1,80 @@
+name: leather-pattern-studio
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: lps
+      POSTGRES_PASSWORD: lps
+      POSTGRES_DB: lps
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lps"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg2://lps:lps@postgres:5432/lps
+      REDIS_URL: redis://redis:6379/0
+      EXPORTS_DIR: /data/exports
+    volumes:
+      - exports:/data/exports
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg2://lps:lps@postgres:5432/lps
+      REDIS_URL: redis://redis:6379/0
+      EXPORTS_DIR: /data/exports
+    volumes:
+      - exports:/data/exports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Running two containers of the same worker image and letting Redis
+    # fan jobs out between them is the scale-out story for this service —
+    # try it with: docker compose up --scale worker=2
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      VITE_API_PROXY_TARGET: http://api:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  pg-data:
+  exports:

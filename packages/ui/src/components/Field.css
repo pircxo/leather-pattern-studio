@@ -1,0 +1,30 @@
+.lps-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lps-space-1);
+  margin-bottom: var(--lps-space-3);
+  font-family: var(--lps-font-sans);
+}
+
+.lps-field__label {
+  font-weight: 600;
+  color: var(--lps-color-ink);
+  font-size: 0.875rem;
+}
+
+.lps-field__hint {
+  margin: 0;
+  color: var(--lps-color-ink-muted);
+  font-size: 0.8rem;
+}
+
+.lps-field__error {
+  margin: 0;
+  color: var(--lps-color-danger);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.lps-field[data-invalid] .lps-field__label {
+  color: var(--lps-color-danger);
+}

@@ -1,0 +1,25 @@
+.lps-slider__row {
+  display: flex;
+  align-items: center;
+  gap: var(--lps-space-3);
+}
+
+.lps-slider__input {
+  flex: 1;
+  accent-color: var(--lps-color-leather);
+}
+
+.lps-slider__input:focus-visible {
+  outline: none;
+  box-shadow: var(--lps-focus-ring);
+  border-radius: var(--lps-radius-sm);
+}
+
+.lps-slider__value {
+  font-family: var(--lps-font-sans);
+  font-variant-numeric: tabular-nums;
+  min-width: 6ch;
+  text-align: right;
+  color: var(--lps-color-ink);
+  font-weight: 600;
+}

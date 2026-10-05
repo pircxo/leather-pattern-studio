@@ -1,0 +1,30 @@
+.lps-number-field__row {
+  display: flex;
+  align-items: center;
+  gap: var(--lps-space-2);
+}
+
+.lps-number-field__input {
+  font-family: var(--lps-font-sans);
+  font-size: 0.95rem;
+  padding: var(--lps-space-2);
+  border: 1px solid var(--lps-color-border);
+  border-radius: var(--lps-radius-sm);
+  width: 7ch;
+  color: var(--lps-color-ink);
+  background: #fff;
+}
+
+.lps-number-field__input:focus-visible {
+  outline: none;
+  box-shadow: var(--lps-focus-ring);
+}
+
+.lps-number-field__input[aria-invalid="true"] {
+  border-color: var(--lps-color-danger);
+}
+
+.lps-number-field__unit {
+  color: var(--lps-color-ink-muted);
+  font-size: 0.85rem;
+}

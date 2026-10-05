@@ -1,0 +1,97 @@
+[
+  {
+    "input": {
+      "finished_width_mm": 100,
+      "finished_height_mm": 50,
+      "corner_radius_mm": 0,
+      "seam_allowance_mm": 5
+    },
+    "expected": {
+      "cut_width_mm": 110,
+      "cut_height_mm": 60,
+      "finished_corner_radius_mm": 0,
+      "cut_corner_radius_mm": 5,
+      "finished_area_cm2": 50.0,
+      "finished_perimeter_cm": 30.0,
+      "cut_area_cm2": 65.79,
+      "cut_perimeter_cm": 33.14,
+      "warning_count": 0
+    }
+  },
+  {
+    "input": {
+      "finished_width_mm": 80,
+      "finished_height_mm": 40,
+      "corner_radius_mm": 10,
+      "seam_allowance_mm": 5
+    },
+    "expected": {
+      "cut_width_mm": 90,
+      "cut_height_mm": 50,
+      "finished_corner_radius_mm": 10,
+      "cut_corner_radius_mm": 15,
+      "finished_area_cm2": 31.14,
+      "finished_perimeter_cm": 22.28,
+      "cut_area_cm2": 43.07,
+      "cut_perimeter_cm": 25.42,
+      "warning_count": 0
+    }
+  },
+  {
+    "input": {
+      "finished_width_mm": 250,
+      "finished_height_mm": 25,
+      "corner_radius_mm": 3,
+      "seam_allowance_mm": 4
+    },
+    "expected": {
+      "cut_width_mm": 258,
+      "cut_height_mm": 33,
+      "finished_corner_radius_mm": 3,
+      "cut_corner_radius_mm": 7,
+      "finished_area_cm2": 62.42,
+      "finished_perimeter_cm": 54.48,
+      "cut_area_cm2": 84.72,
+      "cut_perimeter_cm": 57.0,
+      "warning_count": 0
+    }
+  },
+  {
+    "input": {
+      "finished_width_mm": 20,
+      "finished_height_mm": 10,
+      "corner_radius_mm": 100,
+      "seam_allowance_mm": 2
+    },
+    "expected": {
+      "cut_width_mm": 24,
+      "cut_height_mm": 14,
+      "finished_corner_radius_mm": 5.0,
+      "cut_corner_radius_mm": 7.0,
+      "finished_area_cm2": 1.79,
+      "finished_perimeter_cm": 5.14,
+      "cut_area_cm2": 2.94,
+      "cut_perimeter_cm": 6.4,
+      "warning_count": 1
+    }
+  },
+  {
+    "input": {
+      "finished_width_mm": 60,
+      "finished_height_mm": 60,
+      "corner_radius_mm": 5,
+      "seam_allowance_mm": 5
+    },
+    "expected": {
+      "cut_width_mm": 70,
+      "cut_height_mm": 70,
+      "finished_corner_radius_mm": 5,
+      "cut_corner_radius_mm": 10,
+      "finished_area_cm2": 35.79,
+      "finished_perimeter_cm": 23.14,
+      "cut_area_cm2": 48.14,
+      "cut_perimeter_cm": 26.28,
+      "warning_count": 0
+    }
+  }
+]
