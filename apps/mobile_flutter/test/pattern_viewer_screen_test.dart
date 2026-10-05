@@ -20,6 +20,9 @@ class FakePatternApi extends PatternApi {
   }
 
   @override
+  Future<String> fetchSvg(int id) async => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><rect width="50" height="50"/></svg>';
+
+  @override
   String svgExportUrl(int id) => 'http://fake/patterns/$id/export.svg';
 }
 
@@ -51,7 +54,7 @@ void main() {
 
     expect(find.text('Crossbody strap'), findsOneWidget);
     expect(find.textContaining('250×25mm'), findsOneWidget);
-    expect(find.textContaining('export is still being generated'), findsOneWidget);
+    expect(find.textContaining('Export is still being generated'), findsOneWidget);
   });
 
   testWidgets('shows a clear message when the pattern does not exist', (tester) async {
@@ -75,6 +78,26 @@ void main() {
     await tester.tap(find.widgetWithText(ElevatedButton, 'Load'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Enter a numeric pattern id.'), findsOneWidget);
+    expect(find.text('Enter a positive numeric pattern id.'), findsOneWidget);
   });
+  testWidgets('renders a ready SVG without a network-dependent widget', (tester) async {
+    final fakeApi = FakePatternApi(patternToReturn: Pattern(
+      id: 8, name: 'Ready wallet', finishedWidthMm: 110,
+      finishedHeightMm: 90, exportStatus: 'ready',
+    ));
+    await tester.pumpWidget(MaterialApp(home: PatternViewerScreen(api: fakeApi)));
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Load'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ready wallet'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('rejects a zero id', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: PatternViewerScreen(api: FakePatternApi())));
+    await tester.enterText(find.byType(TextField), '0');
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Load'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a positive numeric pattern id.'), findsOneWidget);
+  });
+
 }

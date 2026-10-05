@@ -13,7 +13,14 @@ export interface TextFieldProps {
 /** A labelled single-line text input. Shares styling with NumberField but
  * keeps its own component since the two will keep diverging (e.g. this
  * one gains a character counter before NumberField ever would). */
-export function TextField({ label, value, onChange, hint, error, maxLength }: TextFieldProps) {
+export function TextField({
+  label,
+  value,
+  onChange,
+  hint,
+  error,
+  maxLength,
+}: TextFieldProps) {
   return (
     <Field label={label} hint={hint} error={error}>
       {({ inputId, describedBy }) => (

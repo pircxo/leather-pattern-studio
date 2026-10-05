@@ -1,17 +1,18 @@
-FROM node:20-alpine
-
+FROM node:22-alpine AS build
 WORKDIR /srv
-
-# The UI kit is consumed straight from source via a Vite alias (see
-# vite.config.ts), so it needs to be present in the image, but it is
-# never `npm install`-ed as its own package here — only its source files
-# matter to the web app's build.
-COPY packages/ui /srv/packages/ui
-COPY apps/web/package.json apps/web/package-lock.json* /srv/apps/web/
-WORKDIR /srv/apps/web
-RUN npm install
-
+COPY apps/web/package.json apps/web/package-lock.json /srv/apps/web/
+COPY packages/ui/package.json packages/ui/package-lock.json /srv/packages/ui/
+RUN cd /srv/packages/ui && npm ci --no-audit --no-fund
+RUN cd /srv/apps/web && npm ci --no-audit --no-fund
+COPY packages/ui/src /srv/packages/ui/src
+# The build type-checks src/, including tests that import the shared fixtures.
+COPY fixtures /srv/fixtures
 COPY apps/web /srv/apps/web
+WORKDIR /srv/apps/web
+RUN npm run build
 
-EXPOSE 5173
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+FROM nginx:1.28-alpine
+COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /srv/apps/web/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

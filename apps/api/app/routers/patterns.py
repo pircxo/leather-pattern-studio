@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from core_py import geometry
 from core_py.db import SessionLocal
-from core_py.models import Pattern
+from core_py.jobs import write_export_files
+from core_py.models import Pattern, Order
 
 from ..events import enqueue_export_job
 from ..schemas import PatternCreate, PatternList, PatternOut
@@ -70,11 +72,17 @@ def create_pattern(payload: PatternCreate, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=PatternList)
-def list_patterns(db: Session = Depends(get_db), limit: int = 50, offset: int = 0):
-    total = db.query(Pattern).count()
-    items = (
-        db.query(Pattern).order_by(Pattern.id.desc()).offset(offset).limit(limit).all()
-    )
+def list_patterns(
+    db: Session = Depends(get_db),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    q: str = Query("", max_length=120),
+):
+    query = db.query(Pattern)
+    if q.strip():
+        query = query.filter(Pattern.name.icontains(q.strip(), autoescape=True))
+    total = query.count()
+    items = query.order_by(Pattern.id.desc()).offset(offset).limit(limit).all()
     return PatternList(items=items, total=total)
 
 
@@ -86,27 +94,86 @@ def get_pattern(pattern_id: int, db: Session = Depends(get_db)):
     return pattern
 
 
-@router.get("/{pattern_id}/export.svg")
-def get_pattern_svg(pattern_id: int, db: Session = Depends(get_db)):
+@router.delete("/{pattern_id}", status_code=204)
+def delete_pattern(pattern_id: int, db: Session = Depends(get_db)):
+    pattern = db.get(Pattern, pattern_id)
+    if pattern is None:
+        raise HTTPException(404, "pattern not found")
+    if pattern.export_status in ("pending", "processing"):
+        raise HTTPException(409, "Wait until the export finishes before deleting this pattern.")
+    if db.query(Order).filter(Order.pattern_id == pattern_id).first():
+        raise HTTPException(
+            409, "This pattern is linked to an order and must be kept for production history."
+        )
+    paths = [pattern.svg_export_path, pattern.pdf_export_path]
+    db.delete(pattern)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            409, "This pattern is linked to an order and must be kept for production history."
+        ) from exc
+    for path in paths:
+        if path:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+    return Response(status_code=204)
+
+
+@router.post("/{pattern_id}/retry-export", response_model=PatternOut)
+def retry_export(pattern_id: int, db: Session = Depends(get_db)):
+    pattern = db.get(Pattern, pattern_id)
+    if pattern is None:
+        raise HTTPException(404, "pattern not found")
+    if pattern.export_status != "failed":
+        raise HTTPException(409, "Only failed exports can be retried.")
+    pattern.export_status = "pending"
+    pattern.export_error = None
+    db.commit()
+    enqueue_export_job(pattern_id)
+    db.refresh(pattern)
+    return pattern
+
+
+def _export_file(pattern_id: int, kind: str, db: Session) -> str:
+    """Path to a ready export, re-rendering it from the stored parameters if
+    the file is gone. Export files are a cache, not the record: on
+    serverless hosts (Vercel) local disk doesn't survive between requests,
+    and a lost Docker volume shouldn't make saved patterns undownloadable."""
     pattern = db.get(Pattern, pattern_id)
     if pattern is None:
         raise HTTPException(status_code=404, detail="pattern not found")
-    if not pattern.svg_export_path or not os.path.exists(pattern.svg_export_path):
+    if pattern.export_status != "ready":
         raise HTTPException(
             status_code=409,
             detail=f"export not ready yet (status={pattern.export_status})",
         )
-    return FileResponse(pattern.svg_export_path, media_type="image/svg+xml")
+    path = pattern.svg_export_path if kind == "svg" else pattern.pdf_export_path
+    if not path or not os.path.exists(path):
+        pattern.svg_export_path, pattern.pdf_export_path = write_export_files(pattern)
+        db.commit()
+        path = pattern.svg_export_path if kind == "svg" else pattern.pdf_export_path
+    return path
+
+
+@router.get("/{pattern_id}/export.svg")
+def get_pattern_svg(pattern_id: int, db: Session = Depends(get_db)):
+    return FileResponse(
+        _export_file(pattern_id, "svg", db),
+        media_type="image/svg+xml",
+        filename=f"pattern-{pattern_id}.svg",
+        content_disposition_type="inline",
+    )
 
 
 @router.get("/{pattern_id}/export.pdf")
 def get_pattern_pdf(pattern_id: int, db: Session = Depends(get_db)):
-    pattern = db.get(Pattern, pattern_id)
-    if pattern is None:
-        raise HTTPException(status_code=404, detail="pattern not found")
-    if not pattern.pdf_export_path or not os.path.exists(pattern.pdf_export_path):
-        raise HTTPException(
-            status_code=409,
-            detail=f"export not ready yet (status={pattern.export_status})",
-        )
-    return FileResponse(pattern.pdf_export_path, media_type="application/pdf")
+    return FileResponse(
+        _export_file(pattern_id, "pdf", db),
+        media_type="application/pdf",
+        filename=f"pattern-{pattern_id}.pdf",
+        content_disposition_type="inline",
+    )

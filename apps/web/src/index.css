@@ -1,27 +1,62 @@
 body {
   margin: 0;
-  background: var(--lps-color-surface, #fbf8f5);
-  color: var(--lps-color-ink, #221c1a);
-  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  background: var(--lps-color-surface);
+  color: var(--lps-color-ink);
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
-
+* {
+  box-sizing: border-box;
+}
+button,
+input {
+  font: inherit;
+}
+button,
+a,
+input {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
 a {
-  color: var(--lps-color-leather-dark, #5c2c16);
+  color: var(--lps-color-leather-dark);
 }
-
-/* Skip link: visually hidden until focused, so keyboard users can jump
-   straight past the repeated header controls to the main content. */
+:focus-visible {
+  outline: 2px solid var(--lps-color-leather);
+  outline-offset: 4px;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .lps-skip-link {
   position: absolute;
   left: -9999px;
   top: 0;
 }
 .lps-skip-link:focus {
-  left: var(--lps-space-2, 8px);
-  top: var(--lps-space-2, 8px);
-  background: #fff;
-  padding: var(--lps-space-2, 8px) var(--lps-space-3, 16px);
-  border-radius: var(--lps-radius-sm, 4px);
-  box-shadow: var(--lps-focus-ring, 0 0 0 3px #fff, 0 0 0 5px #5c2c16);
+  left: 16px;
+  top: 16px;
+  background: var(--lps-color-panel);
+  padding: 12px 20px;
+  border-radius: 4px;
   z-index: 10;
 }

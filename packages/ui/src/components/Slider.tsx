@@ -22,7 +22,16 @@ export interface SliderProps {
  * add `aria-valuetext` so the unit is announced ("120 millimeters", not
  * just "120"), and a visible numeric readout for sighted users.
  */
-export function Slider({ label, value, onChange, min, max, step = 1, unit, hint }: SliderProps) {
+export function Slider({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step = 1,
+  unit,
+  hint,
+}: SliderProps) {
   return (
     <Field label={label} hint={hint}>
       {({ inputId, describedBy }) => (

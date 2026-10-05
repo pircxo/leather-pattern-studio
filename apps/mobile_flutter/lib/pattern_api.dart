@@ -60,7 +60,7 @@ class PatternApi {
 
   Future<Pattern> fetchPattern(int id) async {
     final uri = Uri.parse('$baseUrl/patterns/$id');
-    final response = await _client.get(uri);
+    final response = await _client.get(uri).timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 404) {
       throw PatternNotFoundException(id);
@@ -71,6 +71,16 @@ class PatternApi {
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     return Pattern.fromJson(body);
+  }
+
+  Future<String> fetchSvg(int id) async {
+    final response = await _client
+        .get(Uri.parse(svgExportUrl(id)))
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw PatternApiException('Could not load the SVG export (${response.statusCode}).');
+    }
+    return response.body;
   }
 
   String svgExportUrl(int id) => '$baseUrl/patterns/$id/export.svg';

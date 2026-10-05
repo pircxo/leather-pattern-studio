@@ -25,6 +25,8 @@ from redis import Redis
 from rq import Queue
 
 from core_py.jobs import export_job
+from core_py.db import session_scope
+from core_py.models import Pattern
 
 logger = logging.getLogger("lps.events")
 
@@ -37,7 +39,7 @@ _queue: Queue | None = None
 def _get_queue() -> Queue:
     global _redis, _queue
     if _queue is None:
-        _redis = Redis.from_url(REDIS_URL, socket_connect_timeout=0.5)
+        _redis = Redis.from_url(REDIS_URL, socket_connect_timeout=0.5, socket_timeout=1)
         _queue = Queue("exports", connection=_redis)
     return _queue
 
@@ -46,11 +48,25 @@ def enqueue_export_job(pattern_id: int) -> str:
     """Enqueue async export rendering for a pattern. Returns 'queued' if
     it genuinely went onto Redis, or 'inline' if it fell back to running
     synchronously (Redis unreachable)."""
+    mode = os.environ.get("EXPORT_MODE", "auto")
+    if mode == "inline":
+        export_job(pattern_id)
+        return "inline"
     try:
         queue = _get_queue()
         queue.enqueue(export_job, pattern_id, job_timeout=60)
         return "queued"
     except Exception:
+        if mode == "queued":
+            logger.exception("Could not enqueue export for pattern %s", pattern_id)
+            with session_scope() as db:
+                pattern = db.get(Pattern, pattern_id)
+                if pattern:
+                    pattern.export_status = "failed"
+                    pattern.export_error = (
+                        "The export queue is unavailable. Retry when the worker is running."
+                    )
+            return "failed"
         logger.warning(
             "Redis unavailable, running export_job(%s) inline instead of queuing. "
             "This is fine for local development without `docker compose`, but means "

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session, selectinload
 
 from core_py.db import SessionLocal
 from core_py.models import Order, Pattern
 
-from ..schemas import OrderCreate, OrderOut
+from ..schemas import OrderCreate, OrderOut, OrderList, OrderUpdate
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
 
@@ -38,6 +38,43 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
         customer_note=payload.customer_note,
     )
     db.add(order)
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+@router.get("", response_model=OrderList)
+def list_orders(
+    db: Session = Depends(get_db),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    return OrderList(
+        items=db.query(Order)
+        .options(selectinload(Order.pattern))
+        .order_by(Order.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all(),
+        total=db.query(Order).count(),
+    )
+
+
+@router.patch("/{order_id}", response_model=OrderOut)
+def update_order(order_id: int, payload: OrderUpdate, db: Session = Depends(get_db)):
+    order = db.get(Order, order_id)
+    if order is None:
+        raise HTTPException(404, "order not found")
+    next_status = {"received": "in_production", "in_production": "shipped"}
+    if payload.status != order.status and next_status.get(order.status) != payload.status:
+        raise HTTPException(409, "Orders move from received to in production to shipped.")
+    if payload.status == "in_production":
+        pattern = db.get(Pattern, order.pattern_id)
+        if pattern.export_status != "ready":
+            raise HTTPException(
+                409, "The cutting pattern export must be ready before production starts."
+            )
+    order.status = payload.status
     db.commit()
     db.refresh(order)
     return order

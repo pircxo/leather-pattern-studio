@@ -35,10 +35,17 @@ services:
       DATABASE_URL: postgresql+psycopg2://lps:lps@postgres:5432/lps
       REDIS_URL: redis://redis:6379/0
       EXPORTS_DIR: /data/exports
+      EXPORT_MODE: queued
     volumes:
       - exports:/data/exports
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,12 +75,11 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-    environment:
-      VITE_API_PROXY_TARGET: http://api:8000
     ports:
-      - "5173:5173"
+      - "5173:80"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 volumes:
   pg-data:

@@ -13,7 +13,12 @@ const options = [
 describe("ColorSwatchGroup", () => {
   it("renders as a native radio group, reachable by role and label", () => {
     render(
-      <ColorSwatchGroup legend="Leather colour" options={options} value="chestnut" onChange={() => {}} />
+      <ColorSwatchGroup
+        legend="Leather colour"
+        options={options}
+        value="chestnut"
+        onChange={() => {}}
+      />,
     );
     const group = screen.getByRole("group", { name: "Leather colour" });
     expect(group).toBeInTheDocument();
@@ -24,7 +29,12 @@ describe("ColorSwatchGroup", () => {
   it("calls onChange with the new value when a swatch is chosen (mouse or keyboard)", async () => {
     const onChange = vi.fn();
     render(
-      <ColorSwatchGroup legend="Leather colour" options={options} value="chestnut" onChange={onChange} />
+      <ColorSwatchGroup
+        legend="Leather colour"
+        options={options}
+        value="chestnut"
+        onChange={onChange}
+      />,
     );
 
     await userEvent.click(screen.getByRole("radio", { name: "Burgundy" }));
@@ -34,7 +44,12 @@ describe("ColorSwatchGroup", () => {
   it("supports arrow-key navigation between swatches, for free, via native radio semantics", async () => {
     const onChange = vi.fn();
     render(
-      <ColorSwatchGroup legend="Leather colour" options={options} value="chestnut" onChange={onChange} />
+      <ColorSwatchGroup
+        legend="Leather colour"
+        options={options}
+        value="chestnut"
+        onChange={onChange}
+      />,
     );
 
     screen.getByRole("radio", { name: "Chestnut" }).focus();
@@ -45,7 +60,12 @@ describe("ColorSwatchGroup", () => {
 
   it("has no automatically detectable accessibility violations", async () => {
     const { container } = render(
-      <ColorSwatchGroup legend="Leather colour" options={options} value="chestnut" onChange={() => {}} />
+      <ColorSwatchGroup
+        legend="Leather colour"
+        options={options}
+        value="chestnut"
+        onChange={() => {}}
+      />,
     );
     expect(await axe(container)).toHaveNoViolations();
   });

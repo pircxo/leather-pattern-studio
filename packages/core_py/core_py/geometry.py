@@ -22,6 +22,7 @@ the same inputs).
 from __future__ import annotations
 
 import math
+from html import escape
 from dataclasses import dataclass, field
 
 
@@ -108,6 +109,11 @@ def generate_panel(
     common, harmless slider overshoot, so it is clamped with a warning
     instead of rejected.
     """
+    if not all(
+        math.isfinite(value)
+        for value in (finished_width_mm, finished_height_mm, corner_radius_mm, seam_allowance_mm)
+    ):
+        raise ValueError("All dimensions must be finite numbers")
     if finished_width_mm <= 0 or finished_height_mm <= 0:
         raise ValueError("finished_width_mm and finished_height_mm must be > 0")
     if seam_allowance_mm < 0:
@@ -176,21 +182,22 @@ def render_panel_svg(panel: PanelResult, label: str | None = None) -> str:
     outline, dashed stitch guide, and a mm scale so it can be printed
     1:1 and checked with a ruler."""
     pad = 10
-    w = panel.viewbox_width_mm + 2 * pad
-    h = panel.viewbox_height_mm + 2 * pad
-    label_svg = (
-        f'<text x="{pad}" y="{pad - 3}" font-size="4" font-family="sans-serif">'
-        f"{label}</text>"
-        if label
-        else ""
-    )
+    w = max(panel.viewbox_width_mm + 2 * pad, 80)
+    h = panel.viewbox_height_mm + 2 * pad + 12
+    visible_label = label or "Cutting pattern"
+    max_chars = max(8, int((w - 2 * pad) / 2.5))
+    if len(visible_label) > max_chars:
+        visible_label = visible_label[: max_chars - 3] + "..."
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="{w}mm" height="{h}mm"
      viewBox="0 0 {w} {h}">
+  <title>{escape(label or "Cutting pattern")}</title>
   <g transform="translate({pad},{pad})">
     <path d="{panel.cut_outline_path}" fill="none" stroke="#1a1a1a" stroke-width="0.4" />
     <path d="{panel.stitch_guide_path}" fill="none" stroke="#b5542d"
           stroke-width="0.3" stroke-dasharray="2,1.5" />
   </g>
-  {label_svg}
+  <text x="{pad}" y="{pad - 3}" font-size="4" font-family="sans-serif">{escape(visible_label)}</text>
+  <path d="M 10,{h - 8} h 50 m -50,-2 v 4 m 50,-4 v 4" fill="none" stroke="#1a1a1a" stroke-width="0.3" />
+  <text x="10" y="{h - 2}" font-size="3" font-family="sans-serif">50 mm - print at 100%</text>
 </svg>"""

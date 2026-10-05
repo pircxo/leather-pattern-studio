@@ -1,0 +1,9 @@
+# Python dependencies for the Vercel function in api/index.py only.
+# Local development and Docker use apps/api/requirements*.txt instead.
+fastapi>=0.109,<1.0
+SQLAlchemy>=2.0,<3.0
+pydantic>=2.5,<3.0
+reportlab>=4.0,<5.0
+psycopg2-binary>=2.9,<3.0
+redis>=5.0,<6.0
+rq>=1.16,<2.0

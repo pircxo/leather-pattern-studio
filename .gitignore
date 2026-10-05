@@ -33,3 +33,10 @@ apps/mobile_flutter/.packages
 ## Env
 .env
 .env.local
+
+## Generated exports and test artifacts
+apps/api/exports/
+test-results/
+playwright-report/
+*.tsbuildinfo
+tmp/
