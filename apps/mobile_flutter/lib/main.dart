@@ -9,7 +9,7 @@ const String _defaultApiBaseUrl = 'http://localhost:8000/api/v1';
 
 void main() {
   const apiBaseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: _defaultApiBaseUrl);
-  runApp(LpsCompanionApp(apiBaseUrl: apiBaseUrl));
+  runApp(const LpsCompanionApp(apiBaseUrl: apiBaseUrl));
 }
 
 class LpsCompanionApp extends StatelessWidget {

@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 
 from core_py import geometry
 from core_py.db import SessionLocal
+from core_py.jobs import write_export_files
 from core_py.models import Pattern, Order
 
 from ..events import enqueue_export_job
@@ -137,22 +138,31 @@ def retry_export(pattern_id: int, db: Session = Depends(get_db)):
     return pattern
 
 
-@router.get("/{pattern_id}/export.svg")
-def get_pattern_svg(pattern_id: int, db: Session = Depends(get_db)):
+def _export_file(pattern_id: int, kind: str, db: Session) -> str:
+    """Path to a ready export, re-rendering it from the stored parameters if
+    the file is gone. Export files are a cache, not the record: on
+    serverless hosts (Vercel) local disk doesn't survive between requests,
+    and a lost Docker volume shouldn't make saved patterns undownloadable."""
     pattern = db.get(Pattern, pattern_id)
     if pattern is None:
         raise HTTPException(status_code=404, detail="pattern not found")
-    if (
-        pattern.export_status != "ready"
-        or not pattern.svg_export_path
-        or not os.path.exists(pattern.svg_export_path)
-    ):
+    if pattern.export_status != "ready":
         raise HTTPException(
             status_code=409,
             detail=f"export not ready yet (status={pattern.export_status})",
         )
+    path = pattern.svg_export_path if kind == "svg" else pattern.pdf_export_path
+    if not path or not os.path.exists(path):
+        pattern.svg_export_path, pattern.pdf_export_path = write_export_files(pattern)
+        db.commit()
+        path = pattern.svg_export_path if kind == "svg" else pattern.pdf_export_path
+    return path
+
+
+@router.get("/{pattern_id}/export.svg")
+def get_pattern_svg(pattern_id: int, db: Session = Depends(get_db)):
     return FileResponse(
-        pattern.svg_export_path,
+        _export_file(pattern_id, "svg", db),
         media_type="image/svg+xml",
         filename=f"pattern-{pattern_id}.svg",
         content_disposition_type="inline",
@@ -161,20 +171,8 @@ def get_pattern_svg(pattern_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{pattern_id}/export.pdf")
 def get_pattern_pdf(pattern_id: int, db: Session = Depends(get_db)):
-    pattern = db.get(Pattern, pattern_id)
-    if pattern is None:
-        raise HTTPException(status_code=404, detail="pattern not found")
-    if (
-        pattern.export_status != "ready"
-        or not pattern.pdf_export_path
-        or not os.path.exists(pattern.pdf_export_path)
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail=f"export not ready yet (status={pattern.export_status})",
-        )
     return FileResponse(
-        pattern.pdf_export_path,
+        _export_file(pattern_id, "pdf", db),
         media_type="application/pdf",
         filename=f"pattern-{pattern_id}.pdf",
         content_disposition_type="inline",

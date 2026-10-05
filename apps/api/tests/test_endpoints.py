@@ -1,5 +1,7 @@
 """Error-envelope and listing details not covered by test_workflows.py."""
 
+import os
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -66,3 +68,17 @@ def test_list_orders_newest_first():
     second = client.post("/api/v1/orders", json={"pattern_id": pattern["id"]}).json()
     ids = [o["id"] for o in client.get("/api/v1/orders").json()["items"]]
     assert ids.index(second["id"]) < ids.index(first["id"])
+
+
+def test_missing_export_files_are_regenerated_on_download():
+    # Serverless hosts lose local disk between requests; a ready pattern
+    # must still be downloadable.
+    pattern = _create("Regenerated panel")
+    for path in (pattern["svg_export_path"], pattern["pdf_export_path"]):
+        os.remove(path)
+    pdf = client.get(f"/api/v1/patterns/{pattern['id']}/export.pdf")
+    assert pdf.status_code == 200
+    assert pdf.content.startswith(b"%PDF-")
+    svg = client.get(f"/api/v1/patterns/{pattern['id']}/export.svg")
+    assert svg.status_code == 200
+    assert "Regenerated panel" in svg.text

@@ -45,3 +45,21 @@ On Linux (Docker, CI) each job runs in a forked child process, isolating crashes
 `python3 scripts/smoke_stack.py` checks the running Compose stack at `http://127.0.0.1:5173`: save, poll until exported, download SVG/PDF, delete the smoke pattern. Use `STUDIO_URL` to point it at a different local test stack. Run it only against a demo/test deployment because it creates a temporary record.
 
 CI runs this after a full Docker build, alongside unit and browser checks. No deployment to an external host is performed automatically.
+
+## Vercel
+
+`vercel.json` builds the web app as static files and serves the FastAPI app as one Python function (`api/index.py`) under `/api`. Its Python dependencies are in the root `requirements.txt`.
+
+Serverless hosting changes three things compared with the Compose stack:
+
+- **Database:** set `DATABASE_URL` to a hosted Postgres (for example Neon, added from the Vercel Marketplace). Without it the function falls back to SQLite in `/tmp`, which works but loses data whenever an instance is recycled.
+- **Exports:** there is no long-running worker, so exports render inline. Local disk doesn't persist between requests, so the download endpoints re-render a missing SVG/PDF from the stored dimensions.
+- **Queue:** Redis and `apps/worker` aren't used on Vercel. The queued architecture is exercised by Docker Compose and CI.
+
+```bash
+npm i -g vercel
+vercel login
+vercel link
+vercel env add DATABASE_URL production   # or connect Neon from the Vercel dashboard
+vercel --prod
+```

@@ -127,12 +127,39 @@ def _write_svg(panel: geometry.PanelResult, path: str, label: str) -> None:
         stream.write(geometry.render_panel_svg(panel, label=label))
 
 
+def write_export_files(pattern: Pattern) -> tuple[str, str]:
+    """Render a pattern's SVG and PDF from its stored parameters into
+    EXPORTS_DIR and return their paths. Each file is written to a temporary
+    name and atomically moved into place, so a reader never sees a
+    partially written export."""
+    os.makedirs(EXPORTS_DIR, exist_ok=True)
+    panel = geometry.generate_panel(
+        finished_width_mm=pattern.finished_width_mm,
+        finished_height_mm=pattern.finished_height_mm,
+        corner_radius_mm=pattern.corner_radius_mm,
+        seam_allowance_mm=pattern.seam_allowance_mm,
+    )
+    svg_path = os.path.join(EXPORTS_DIR, f"pattern-{pattern.id}.svg")
+    pdf_path = os.path.join(EXPORTS_DIR, f"pattern-{pattern.id}.pdf")
+    for target, render in (
+        (svg_path, lambda path: _write_svg(panel, path, pattern.name)),
+        (pdf_path, lambda path: _write_pdf(panel, path, pattern.name)),
+    ):
+        fd, temporary = tempfile.mkstemp(dir=EXPORTS_DIR)
+        os.close(fd)
+        try:
+            render(temporary)
+            os.replace(temporary, target)
+        finally:
+            if os.path.exists(temporary):
+                os.remove(temporary)
+    return svg_path, pdf_path
+
+
 def export_job(pattern_id: int) -> None:
     """Render exports for one pattern and persist the result. Safe to
     retry: it always recomputes from the stored parameters and overwrites
     whatever partial output a previous attempt left behind."""
-    os.makedirs(EXPORTS_DIR, exist_ok=True)
-
     with session_scope() as db:
         pattern = db.get(Pattern, pattern_id)
         if pattern is None:
@@ -143,29 +170,7 @@ def export_job(pattern_id: int) -> None:
         db.commit()
 
         try:
-            panel = geometry.generate_panel(
-                finished_width_mm=pattern.finished_width_mm,
-                finished_height_mm=pattern.finished_height_mm,
-                corner_radius_mm=pattern.corner_radius_mm,
-                seam_allowance_mm=pattern.seam_allowance_mm,
-            )
-
-            svg_path = os.path.join(EXPORTS_DIR, f"pattern-{pattern_id}.svg")
-            pdf_path = os.path.join(EXPORTS_DIR, f"pattern-{pattern_id}.pdf")
-
-            # Atomic replacements prevent clients seeing a partially written export.
-            for target, render in (
-                (svg_path, lambda path: _write_svg(panel, path, pattern.name)),
-                (pdf_path, lambda path: _write_pdf(panel, path, pattern.name)),
-            ):
-                fd, temporary = tempfile.mkstemp(dir=EXPORTS_DIR)
-                os.close(fd)
-                try:
-                    render(temporary)
-                    os.replace(temporary, target)
-                finally:
-                    if os.path.exists(temporary):
-                        os.remove(temporary)
+            svg_path, pdf_path = write_export_files(pattern)
 
             pattern.svg_export_path = svg_path
             pattern.pdf_export_path = pdf_path

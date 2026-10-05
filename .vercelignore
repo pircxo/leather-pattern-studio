@@ -1,0 +1,13 @@
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/dist
+**/*.db
+**/exports
+apps/mobile_flutter
+e2e
+test-results
+playwright-report
+docs/PORTFOLIO.md
+.env*
