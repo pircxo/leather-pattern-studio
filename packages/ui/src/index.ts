@@ -14,6 +14,9 @@ export { Slider } from "./components/Slider";
 export type { SliderProps } from "./components/Slider";
 
 export { ColorSwatchGroup } from "./components/ColorSwatch";
-export type { ColorOption, ColorSwatchGroupProps } from "./components/ColorSwatch";
+export type {
+  ColorOption,
+  ColorSwatchGroupProps,
+} from "./components/ColorSwatch";
 
 import "./tokens.css";

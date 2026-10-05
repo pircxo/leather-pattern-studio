@@ -37,7 +37,13 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function roundedRectPath(x: number, y: number, w: number, h: number, r: number): string {
+function roundedRectPath(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): string {
   if (r <= 0) {
     return `M ${x},${y} H ${x + w} V ${y + h} H ${x} Z`;
   }
@@ -69,16 +75,23 @@ export function generatePanel(
   finishedWidthMm: number,
   finishedHeightMm: number,
   cornerRadiusMm: number = 0,
-  seamAllowanceMm: number = 5
+  seamAllowanceMm: number = 5,
 ): PanelResult {
+  if (
+    ![finishedWidthMm, finishedHeightMm, cornerRadiusMm, seamAllowanceMm].every(
+      Number.isFinite,
+    )
+  ) {
+    throw new Error("All dimensions must be finite numbers");
+  }
   if (finishedWidthMm <= 0 || finishedHeightMm <= 0) {
-    throw new Error("finishedWidthMm and finishedHeightMm must be > 0");
+    throw new Error("Finished width and height must be greater than 0 mm.");
   }
   if (seamAllowanceMm < 0) {
-    throw new Error("seamAllowanceMm must be >= 0");
+    throw new Error("Seam allowance must be 0 mm or greater.");
   }
   if (cornerRadiusMm < 0) {
-    throw new Error("cornerRadiusMm must be >= 0");
+    throw new Error("Corner radius must be 0 mm or greater.");
   }
 
   const warnings: string[] = [];
@@ -87,8 +100,7 @@ export function generatePanel(
   let finishedRadius = cornerRadiusMm;
   if (finishedRadius > maxFinishedRadius) {
     warnings.push(
-      `corner_radius_mm clamped from ${cornerRadiusMm} to ${round2(maxFinishedRadius)} ` +
-        `(can't exceed half the shorter side)`
+      `Corner radius limited to ${round2(maxFinishedRadius)} mm (half the shorter side).`,
     );
     finishedRadius = maxFinishedRadius;
   }
@@ -103,7 +115,7 @@ export function generatePanel(
     seamAllowanceMm,
     finishedWidthMm,
     finishedHeightMm,
-    finishedRadius
+    finishedRadius,
   );
   const cutPath = roundedRectPath(0, 0, cutWidth, cutHeight, cutRadius);
 
@@ -115,8 +127,16 @@ export function generatePanel(
     cutWidthMm: round2(cutWidth),
     cutHeightMm: round2(cutHeight),
     cutCornerRadiusMm: round2(cutRadius),
-    finishedAreaCm2: roundedRectAreaCm2(finishedWidthMm, finishedHeightMm, finishedRadius),
-    finishedPerimeterCm: roundedRectPerimeterCm(finishedWidthMm, finishedHeightMm, finishedRadius),
+    finishedAreaCm2: roundedRectAreaCm2(
+      finishedWidthMm,
+      finishedHeightMm,
+      finishedRadius,
+    ),
+    finishedPerimeterCm: roundedRectPerimeterCm(
+      finishedWidthMm,
+      finishedHeightMm,
+      finishedRadius,
+    ),
     cutAreaCm2: roundedRectAreaCm2(cutWidth, cutHeight, cutRadius),
     cutPerimeterCm: roundedRectPerimeterCm(cutWidth, cutHeight, cutRadius),
     stitchGuidePath: stitchPath,

@@ -14,7 +14,17 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  * rather than the button silently vanishing mid-action.
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = "primary", busy = false, disabled, className, children, ...rest }, ref) => {
+  (
+    {
+      variant = "primary",
+      busy = false,
+      disabled,
+      className,
+      children,
+      ...rest
+    },
+    ref,
+  ) => {
     return (
       <button
         ref={ref}
@@ -29,6 +39,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {children}
       </button>
     );
-  }
+  },
 );
 Button.displayName = "Button";

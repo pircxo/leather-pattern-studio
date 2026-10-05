@@ -24,7 +24,12 @@ export interface ColorSwatchGroupProps {
  * them is both less code and more robust than reimplementing the ARIA
  * radio pattern by hand.
  */
-export function ColorSwatchGroup({ legend, options, value, onChange }: ColorSwatchGroupProps) {
+export function ColorSwatchGroup({
+  legend,
+  options,
+  value,
+  onChange,
+}: ColorSwatchGroupProps) {
   const groupName = useId();
 
   return (

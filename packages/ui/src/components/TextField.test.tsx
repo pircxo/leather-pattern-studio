@@ -16,7 +16,12 @@ describe("TextField", () => {
 
   it("has no automatically detectable accessibility violations", async () => {
     const { container } = render(
-      <TextField label="Pattern name" value="Wallet panel" onChange={() => {}} hint="Shown on exports" />
+      <TextField
+        label="Pattern name"
+        value="Wallet panel"
+        onChange={() => {}}
+        hint="Shown on exports"
+      />,
     );
     expect(await axe(container)).toHaveNoViolations();
   });

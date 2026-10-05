@@ -76,3 +76,7 @@ class Order(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     pattern: Mapped["Pattern"] = relationship(back_populates="orders")
+
+    @property
+    def pattern_name(self) -> str:
+        return self.pattern.name

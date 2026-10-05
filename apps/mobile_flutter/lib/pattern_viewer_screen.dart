@@ -21,14 +21,15 @@ class _PatternViewerScreenState extends State<PatternViewerScreen> {
   final TextEditingController _idController = TextEditingController(text: '1');
   _LoadState _state = _LoadState.idle;
   Pattern? _pattern;
+  String? _svg;
   String? _errorMessage;
 
   Future<void> _load() async {
     final id = int.tryParse(_idController.text.trim());
-    if (id == null) {
+    if (id == null || id <= 0) {
       setState(() {
         _state = _LoadState.error;
-        _errorMessage = 'Enter a numeric pattern id.';
+        _errorMessage = 'Enter a positive numeric pattern id.';
       });
       return;
     }
@@ -40,11 +41,15 @@ class _PatternViewerScreenState extends State<PatternViewerScreen> {
 
     try {
       final pattern = await widget.api.fetchPattern(id);
+      final svg = pattern.exportStatus == 'ready' ? await widget.api.fetchSvg(id) : null;
+      if (!mounted) return;
       setState(() {
         _pattern = pattern;
+        _svg = svg;
         _state = _LoadState.loaded;
       });
     } catch (err) {
+      if (!mounted) return;
       setState(() {
         _state = _LoadState.error;
         _errorMessage = err.toString();
@@ -131,14 +136,16 @@ class _PatternViewerScreenState extends State<PatternViewerScreen> {
             const SizedBox(height: 16),
             if (pattern.exportStatus == 'ready')
               Expanded(
-                child: SvgPicture.network(
-                  widget.api.svgExportUrl(pattern.id),
+                child: SvgPicture.string(
+                  _svg!,
                   semanticsLabel: '${pattern.name} cutting pattern',
                   placeholderBuilder: (_) => const Center(child: CircularProgressIndicator()),
                 ),
               )
             else
-              const Text('Export is still being generated — try Load again shortly.'),
+              Text(pattern.exportStatus == 'failed'
+                  ? 'Export failed. Retry the export in the web studio.'
+                  : 'Export is still being generated — try Load again shortly.'),
           ],
         );
     }

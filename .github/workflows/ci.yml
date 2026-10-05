@@ -1,76 +1,87 @@
 name: CI
-
 on:
   push:
     branches: [main]
   pull_request:
 
 jobs:
-  api:
-    name: API + geometry (Python)
+  python:
+    name: API, geometry and exports
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_REDIS_URL: redis://127.0.0.1:6379/15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      - name: Install API + shared geometry package
+          python-version: "3.12"
+      - run: python -m venv apps/api/.venv
+      - run: .venv/bin/pip install -r requirements-dev.txt
         working-directory: apps/api
-        run: pip install -r requirements.txt
-      - name: Run pytest (includes the shared cross-language fixture check)
-        working-directory: apps/api
-        run: pytest -q
-
-  ui-kit:
-    name: Accessible component library (packages/ui)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - working-directory: packages/ui
-        run: npm install
-      - name: Run Vitest + jest-axe accessibility checks
-        working-directory: packages/ui
-        run: npm test
+        # Relative package paths are resolved by pip from this working directory.
+      - run: apps/api/.venv/bin/python -m pytest -q
+      - run: apps/api/.venv/bin/ruff check apps/api apps/worker packages/core_py scripts
+      - run: apps/api/.venv/bin/ruff format --check apps/api apps/worker packages/core_py scripts
 
   web:
-    name: Web app (apps/web)
+    name: Frontend, components and browser workflows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-      # apps/web imports the UI kit straight from source via a Vite
-      # alias, so packages/ui needs its own node_modules (for `react`)
-      # present too — see apps/web/vite.config.ts.
-      - working-directory: packages/ui
-        run: npm install
-      - working-directory: apps/web
-        run: npm install
-      - name: Run Vitest (includes the shared cross-language fixture check)
-        working-directory: apps/web
-        run: npm test
-      - name: Type-check
-        working-directory: apps/web
-        run: npx tsc -b --noEmit || npx tsc --noEmit
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm run setup
+      - run: npm test
+      - run: npm run build
+      - run: npm run format:check
+      - run: npx playwright install --with-deps chromium --no-shell
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failure-artifacts
+          path: test-results/
 
   flutter:
-    name: Flutter companion app (apps/mobile_flutter)
+    name: Flutter companion
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.22.0"
-          channel: "stable"
-      - working-directory: apps/mobile_flutter
-        run: flutter pub get
-      - name: Analyze
+          channel: stable
+          cache: true
+      - run: flutter pub get
         working-directory: apps/mobile_flutter
-        run: flutter analyze
-      - name: Widget tests
+      - run: flutter analyze
         working-directory: apps/mobile_flutter
-        run: flutter test
+      - run: flutter test
+        working-directory: apps/mobile_flutter
+      - run: flutter build web
+        working-directory: apps/mobile_flutter
+
+  service-stack:
+    name: Docker stack and real worker smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up --build -d
+      - run: python3 scripts/smoke_stack.py
+      - run: docker compose logs
+        if: failure()
+      - run: docker compose down
+        if: always()

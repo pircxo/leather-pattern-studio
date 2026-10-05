@@ -11,10 +11,12 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import Literal
 
 
 class PatternCreate(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False, extra="forbid")
     name: str = Field(min_length=1, max_length=120, examples=["Crossbody strap, 25mm"])
     material: str = Field(default="veg-tan leather", max_length=80)
     finished_width_mm: float = Field(gt=0, le=2000)
@@ -22,10 +24,12 @@ class PatternCreate(BaseModel):
     corner_radius_mm: float = Field(default=0.0, ge=0, le=1000)
     seam_allowance_mm: float = Field(default=5.0, ge=0, le=50)
 
-    @field_validator("name")
+    @field_validator("name", "material")
     @classmethod
     def strip_name(cls, v: str) -> str:
         v = v.strip()
+        if any(ord(char) < 32 for char in v):
+            raise ValueError("Control characters are not allowed")
         if not v:
             raise ValueError("name cannot be blank")
         return v
@@ -65,13 +69,15 @@ class PatternList(BaseModel):
 
 
 class OrderCreate(BaseModel):
-    pattern_id: int
+    model_config = ConfigDict(extra="forbid")
+    pattern_id: int = Field(gt=0)
     quantity: int = Field(default=1, ge=1, le=10_000)
     customer_note: str | None = Field(default=None, max_length=500)
 
 
 class OrderOut(BaseModel):
     id: int
+    pattern_name: str
     pattern_id: int
     quantity: int
     customer_note: str | None
@@ -79,6 +85,16 @@ class OrderOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class OrderList(BaseModel):
+    items: list[OrderOut]
+    total: int
+
+
+class OrderUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["received", "in_production", "shipped"]
 
 
 class ErrorResponse(BaseModel):

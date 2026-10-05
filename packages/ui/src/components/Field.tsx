@@ -6,7 +6,10 @@ export interface FieldProps {
   hint?: string;
   error?: string;
   /** Render prop so Field owns id/aria wiring but never the input's type. */
-  children: (ids: { inputId: string; describedBy: string | undefined }) => ReactNode;
+  children: (ids: {
+    inputId: string;
+    describedBy: string | undefined;
+  }) => ReactNode;
 }
 
 /**

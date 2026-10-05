@@ -1,59 +1,71 @@
-# REST API design notes
+# REST API contract
 
-This is the reasoning behind `apps/api`'s shape, not just a list of
-endpoints (the interactive list is at `/docs` once the API is running).
-Referenced from the written-interview answer on REST API design.
+The API uses `/api/v1`. Interactive schemas and examples are served at `/docs`.
 
-## Versioning
+| Method | Endpoint | Behavior |
+| --- | --- | --- |
+| GET | `/healthz` | Process liveness |
+| POST | `/api/v1/patterns` | Validate parameters, calculate geometry, persist and enqueue exports; 201 |
+| GET | `/api/v1/patterns?limit=12&offset=0&q=wallet` | Newest-first patterns; `{items, total}` |
+| GET | `/api/v1/patterns/{id}` | Pattern including export status |
+| DELETE | `/api/v1/patterns/{id}` | Delete a completed, unreferenced pattern and its files; 204 |
+| POST | `/api/v1/patterns/{id}/retry-export` | Retry a failed export |
+| GET | `/api/v1/patterns/{id}/export.svg` | Millimetre-sized SVG template |
+| GET | `/api/v1/patterns/{id}/export.pdf` | True-scale tiled A4 PDF |
+| POST | `/api/v1/orders` | Create an order referencing a saved pattern; 201 |
+| GET | `/api/v1/orders?limit=12&offset=0` | Newest-first orders; `{items, total}` |
+| GET | `/api/v1/orders/{id}` | Fetch an order |
+| PATCH | `/api/v1/orders/{id}` | Move to the next production state |
 
-Every route is under `/api/v1/...`. The version lives in the URL path
-rather than in a header (e.g. `Accept: application/vnd.lps.v1+json`)
-because this API has exactly one kind of client today (a browser SPA and
-a mobile app, both easy to point at a new path) and no proxies or caches
-in front of it that would benefit from content negotiation. A path
-version is the simplest thing that lets `v2` exist side-by-side with
-`v1` later without breaking `apps/web` or `apps/mobile_flutter` on their
-own release schedule.
+## Create a pattern
 
-## Resource shape
+```json
+{
+  "name": "Wallet panel",
+  "material": "Veg-tan leather",
+  "finished_width_mm": 110,
+  "finished_height_mm": 90,
+  "corner_radius_mm": 8,
+  "seam_allowance_mm": 4
+}
+```
 
-Two resources: `patterns` and `orders`. `orders` references `patterns` by
-id rather than embedding the pattern — the caller who already has a
-pattern loaded shouldn't have to re-fetch it to place an order, and the
-caller placing an order doesn't need every pattern field (SVG path data,
-warnings) inlined into the order response.
+Dimensions must be finite and positive, up to 2,000 mm. Radius is 0–1,000 mm and seam allowance is 0–50 mm. The actual radius is limited to half the shorter side. Names and materials are trimmed, cannot be blank, and reject control characters. Unknown input fields are rejected. Names have a 120-character limit and materials have an 80-character limit.
 
-## Error shape
+Saved patterns are immutable. Reopen one in the studio and save a new record to revise it. This preserves production history without mutating dimensions used by existing orders.
 
-Every error response is `{"error": "<machine-readable code>", "detail":
-"<human-readable message>"}` (`schemas.ErrorResponse`), whether it's a
-422 validation error, a 404, or an unhandled 500 (caught by the global
-exception handler in `app/main.py`). One shape, not a different one per
-status code, means `apps/web`'s `ApiError` and `apps/mobile_flutter`'s
-`PatternApiException` can both have one, boring error-handling path
-instead of several.
+## Export lifecycle
 
-## Idempotency and side effects
+`pending → processing → ready` or `failed`. The frontend polls every two seconds while visible patterns or its latest saved pattern need an export. A failed export can be retried. Files are replaced atomically; the renderer recomputes from stored parameters on every run.
 
-`POST /patterns` is not idempotent — calling it twice creates two
-patterns, which is correct (two users, or the same user twice, really do
-want two rows). What it *is* careful about is not doing slow work on the
-request thread: geometry is computed synchronously (cheap, pure
-arithmetic, worth returning immediately) but the SVG/PDF export is
-handed to a queue (`events.enqueue_export_job`) so a slow render never
-makes a `POST` hang. A client polls `GET /patterns/{id}` (or `apps/web`
-does, via its "Refresh" button) to see `export_status` move from
-`pending` to `ready`.
+`EXPORT_MODE=inline` executes exports synchronously for a local demo. `queued` uses Redis and records a recoverable failure if enqueueing fails. `auto` (the API default) attempts Redis, then falls back to inline when it cannot connect. If a worker is stopped after a job was accepted, the pattern remains queued until a worker consumes it.
 
-## What's intentionally not here yet
+Downloads return 409 if a file is not ready, and 404 if the pattern does not exist. SVG/PDF filenames use the pattern ID. SVG labels are XML-escaped. The PDF uses a 190 × 250 mm drawing frame, 10 mm overlaps, page coordinates and a 50 mm ruler. Print at actual size / 100%, never fit to page.
 
-- **Pagination cursor, not just limit/offset** on `GET /patterns` — fine
-  at this data volume, would need revisiting before this ever had
-  thousands of rows per user.
-- **Auth.** There's no concept of "whose pattern is this" yet — every
-  pattern is visible to every caller. Fine for a portfolio demo; the
-  first thing to add before this touched real customer data.
-- **Rate limiting** on pattern creation.
+Deletion is blocked while an export is queued/processing or when any order references the pattern. This keeps queued workers and production history consistent.
 
-All three are called out again in `ARCHITECTURE.md`, which is where the
-written-interview answer on reliability and maintainability draws from.
+## Orders
+
+```json
+{"pattern_id": 1, "quantity": 3, "customer_note": "Natural tan, gift order"}
+```
+
+Quantity is an integer from 1 to 10,000; notes are limited to 500 characters. The referenced pattern must exist.
+
+```json
+{"status": "in_production"}
+```
+
+Allowed transitions are `received → in_production → shipped`. Setting the current status is idempotent; skipping ahead or moving backwards returns 409. Production cannot start until the cutting export is ready.
+
+## Errors and pagination
+
+All errors use a consistent envelope:
+
+```json
+{"error": "validation_error", "detail": "finished_width_mm: Input should be greater than 0"}
+```
+
+Common codes are `validation_error` (422), `not_found` (404), `conflict` (409), and `internal_error` (500). Unexpected errors are logged server-side and expose a generic message to clients.
+
+Lists accept a limit of 1–100 (default 50) and a nonnegative offset. `total` counts all matches. Pattern search is a case-insensitive literal substring: SQL wildcard characters are escaped. Pattern creation intentionally creates a new resource each time; it has no idempotency key.

@@ -1,124 +1,122 @@
 # Leather Pattern Studio
 
-A parametric cutting-pattern generator for leather goods — built as a real
-internal tool for [My Star Georgia](https://mystar.ge), a handmade leather
-goods brand I founded, and open-sourced here as a full-stack demo.
+A full-stack workspace for designing leather cutting patterns and tracking workshop production. Built around the panel-drafting workflow of [My Star Georgia](https://mystar.ge).
 
-Instead of hand-drafting a paper pattern for every new bag size or strap
-width, this tool lets you describe a panel with a handful of parameters
-(width, height, corner radius, seam allowance, strap count...) and get back
-an accurate, print-ready SVG/PDF cutting template in seconds — served through
-a versioned REST API, calculated identically on the client (for instant
-feedback) and on the server (as the source of truth), and viewable from a
-small Flutter companion app as well as the web.
+Enter finished dimensions, a corner radius and a seam allowance. The studio draws the cutting outline and stitch guide instantly, saves the server-validated pattern, and generates SVG and true-scale A4 PDF templates. Large panels are tiled across pages with a 10 mm overlap and a 50 mm calibration ruler.
 
-It's deliberately built as **several small services that talk to each
-other** rather than one monolith, because that's the kind of system this
-project was written to practice and demonstrate:
+![Leather Pattern Studio editor](docs/screenshots/editor.png)
 
-```
-┌─────────────────┐        ┌────────────────────┐        ┌───────────────┐
-│   apps/web       │  REST  │     apps/api        │ enqueue│  apps/worker  │
-│ React + TS       ├───────▶│ FastAPI              ├───────▶│ Redis / RQ    │
-│ (packages/ui)    │  JSON  │ geometry + storage   │  job   │ async export  │
-└─────────────────┘        └──────────┬──────────┘        └───────┬───────┘
-                                       │ SQLAlchemy                │ writes
-                                       ▼                           ▼
-                                 ┌───────────┐              ┌─────────────┐
-                                 │ Postgres/  │              │  exports/   │
-                                 │ SQLite     │              │  *.svg,*.pdf│
-                                 └───────────┘              └─────────────┘
-        ┌───────────────────┐
-        │ apps/mobile_flutter │   same REST API, read-only pattern viewer
-        │ Flutter             │
-        └───────────────────┘
+## Features
+
+- Responsive React + TypeScript editor with strap, wallet, tote and pocket presets.
+- Exact dimensions in millimetres, automatic corner-radius limits, calculated cut size, area and stitch length.
+- Leather colour preview, stitch-guide toggle, zoom controls and local draft recovery.
+- Persistent, searchable pattern library with pagination, reopening, downloads and confirmed deletion.
+- Immutable saved patterns: adjustments create a new pattern, preserving dimensions referenced by existing orders.
+- Production orders with quantities and notes; enforced received → in production → shipped transitions.
+- SVG and tiled A4 PDF exports, automatic status polling, export-failure recovery and atomic file writes.
+- FastAPI REST endpoints, OpenAPI documentation and consistent validation/error responses.
+- Redis/RQ export processing, PostgreSQL in Docker, and a SQLite/inline mode for easy local demos.
+- Reusable accessible React controls, shared Python/TypeScript geometry fixtures, browser workflow and accessibility checks.
+- A separate read-only Flutter companion viewer using the same REST API.
+
+## Quick start
+
+Requires **Node.js 22.12+** and **Python 3.11+**. Run these commands from the repository root:
+
+```bash
+npm run setup
+npm run dev
 ```
 
-## Why this project, for this application
+Open **http://localhost:5173**. API documentation is at **http://localhost:8000/docs**. The setup script installs the root browser-testing tools, both JavaScript packages, and the Python API into `apps/api/.venv`.
 
-This repo was built specifically to demonstrate the skills listed in
-Canonical's Web Frontend Engineer (JS, CSS, React, Flutter) role: a
-TypeScript/React frontend built on an accessible component layer (our own
-small answer to Canonical's own [Vanilla Framework](https://vanillaframework.io/)
-and [react-components](https://github.com/canonical/react-components)), a
-REST API designed and documented deliberately, a Python backend service,
-basic event processing between services, and a first, honest step into
-Flutter. `ARCHITECTURE.md` goes through the reasoning behind each decision in
-more depth, organised around the actual questions in Canonical's written
-interview, so it doubles as my notes for that submission.
+No database server or Redis is needed for this mode. Patterns persist in `apps/api/patterns.db`; generated templates are in `apps/api/exports/`. Stop both services with Ctrl+C.
 
-## What's here
+If a port is occupied:
 
-| Path | What it is | Maps to |
-|---|---|---|
-| `packages/ui` | Accessible React + TS component primitives (`Slider`, `NumberField`, `ColorSwatch`, `Button`, `Field`) with full keyboard support, ARIA roles, and automated `axe-core` tests | CSS, accessibility, design-system thinking |
-| `apps/web` | Vite + React + TypeScript pattern configurator, live SVG preview, calls the REST API | React, TypeScript, CSS |
-| `apps/api` | FastAPI service: geometry engine (source of truth), SQLAlchemy models, Pydantic schemas, OpenAPI docs | Python, REST API design, data stores |
-| `apps/worker` | RQ worker consuming a Redis queue to render SVG/PDF exports asynchronously after a pattern is saved | event processing, service integration |
-| `apps/mobile_flutter` | Minimal Flutter screen that fetches a pattern from the same REST API and renders it | Flutter |
-| `docs/API.md` | REST API design notes: versioning, error shape, idempotency | REST API governance |
-| `ARCHITECTURE.md` | Architecture/maintainability/reliability/performance/quality reasoning, mapped to the written-interview questions | systems design, quality, performance |
+```bash
+API_PORT=8001 WEB_PORT=5173 npm run dev
+```
 
-## Running it
+The frontend proxy automatically follows the selected API port. If your system's `python3` is older than 3.11, use `python3.12 scripts/setup.py` and `python3.12 scripts/dev.py` instead.
 
-**Everything, with Docker:**
+## Run the service stack
+
+With Docker and the Compose plugin installed:
 
 ```bash
 docker compose up --build
-# web:     http://localhost:5173
-# api:     http://localhost:8000/docs   (OpenAPI/Swagger UI)
-# redis:   localhost:6379
-# postgres: localhost:5432
 ```
 
-**Piece by piece, for development:**
+The web app remains at **http://localhost:5173**. Compose builds the frontend and serves it with Nginx, proxies `/api` to FastAPI, and runs PostgreSQL, Redis and a separate export worker. Database and export volumes persist across restarts. Stop with `docker compose down`.
 
 ```bash
-# API (Python 3.11+)
-cd apps/api
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+# Scale export processing independently of the API
+docker compose up --scale worker=2
+```
 
-# Worker (needs Redis running — `docker run -p 6379:6379 redis` is enough)
-cd apps/worker
-pip install -r requirements.txt
-python worker.py
+See [Deployment](docs/DEPLOYMENT.md) for configuration and the scope of a portfolio deployment.
 
-# Web
-cd apps/web
-npm install
-npm run dev
+## Verify it
 
-# UI library (used by apps/web via a local workspace link)
-cd packages/ui
-npm install && npm test
+After `npm run setup`:
 
-# Flutter companion app (needs the API running on localhost:8000)
-cd apps/mobile_flutter
+```bash
+npm test                       # React components, accessibility and frontend behavior
+npm run test:api                # REST, geometry, jobs and PDF regression checks
+npm run build                  # TypeScript check and production build
+npm run format:check            # TypeScript/CSS formatting
+apps/api/.venv/bin/ruff check apps/api apps/worker packages/core_py scripts
+apps/api/.venv/bin/ruff format --check apps/api apps/worker packages/core_py scripts
+
+npx playwright install chromium --no-shell
+npm run screenshots             # Disposable sample data; refreshed portfolio previews
+npm run test:e2e                # Real API workflows at desktop and phone sizes
+```
+
+Browser tests launch their own services on ports 18000 and 15173, with temporary databases and exports. They do not modify your local pattern library. CI runs the tests and production build, plus Flutter analysis/tests/build and a Docker service smoke test.
+
+## Flutter companion
+
+Requires a Flutter SDK. From `apps/mobile_flutter`:
+
+```bash
 flutter pub get
-flutter run
+flutter test
+flutter analyze
+flutter run -d web-server --web-port 8080 \
+  --dart-define=API_BASE_URL=http://localhost:8000/api/v1
 ```
 
-## Tests
+Allow that origin in the API when running the browser companion:
 
 ```bash
-cd apps/api && pytest
-cd packages/ui && npm test
-cd apps/web && npm test
-cd apps/mobile_flutter && flutter test
+CORS_ORIGINS=http://localhost:5173,http://localhost:8080 npm run dev
 ```
 
-## Status
+The companion loads a pattern by ID and renders its saved SVG. This repository includes the web entry point. To generate native Android/iOS project wrappers, run `flutter create --platforms=android,ios .` inside the companion directory with the corresponding platform toolchains installed. Use your computer's LAN address for the API when running on a physical device.
 
-This is an honest, working MVP, not a finished commercial product: panel
-geometry currently covers rectangular and rounded-rectangle panels (the
-shapes behind most strap, pocket, and gusset pieces) rather than every
-possible leather component, and the Flutter app is intentionally a small,
-real first step rather than a full mobile client. Both are called out
-explicitly in `ARCHITECTURE.md` along with what a v2 would add — I'd rather
-show a smaller thing working honestly than a bigger thing that's fake.
+## Project layout
+
+| Path | Responsibility |
+| --- | --- |
+| `apps/web` | Pattern editor, library and production workspace |
+| `packages/ui` | Accessible native React controls and design tokens |
+| `apps/api` | Versioned FastAPI API, validation and persistence |
+| `packages/core_py` | Geometry, database models and export rendering |
+| `apps/worker` | Independent Redis/RQ worker |
+| `apps/mobile_flutter` | Read-only companion viewer |
+| `fixtures` | Shared geometry contract for Python and TypeScript |
+| `e2e` | Browser workflows and WCAG accessibility checks |
+| `scripts` | Setup, local service runner and isolated browser-test runner |
+
+[Verification record](docs/VERIFICATION.md) · [Architecture](ARCHITECTURE.md) · [API contract](docs/API.md) · [Contributing](CONTRIBUTING.md)
+
+## Scope
+
+The complete workflow covers rectangular and rounded-rectangle panels. Presets are individual panels, not complete multi-piece bag patterns. The colour choice is visual only. Orders track workshop progress and do not process payments or shipping labels. There is no user-account system: this is a local/shared workshop and portfolio app, not a multi-tenant service.
 
 ## License
 
-MIT — see `LICENSE`.
+MIT — see [LICENSE](LICENSE).

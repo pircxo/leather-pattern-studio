@@ -32,12 +32,14 @@ describe("generatePanel", () => {
         input.finished_width_mm,
         input.finished_height_mm,
         input.corner_radius_mm,
-        input.seam_allowance_mm
+        input.seam_allowance_mm,
       );
 
       expect(panel.cutWidthMm).toBe(expected.cut_width_mm);
       expect(panel.cutHeightMm).toBe(expected.cut_height_mm);
-      expect(panel.finishedCornerRadiusMm).toBe(expected.finished_corner_radius_mm);
+      expect(panel.finishedCornerRadiusMm).toBe(
+        expected.finished_corner_radius_mm,
+      );
       expect(panel.cutCornerRadiusMm).toBe(expected.cut_corner_radius_mm);
       expect(panel.finishedAreaCm2).toBe(expected.finished_area_cm2);
       expect(panel.finishedPerimeterCm).toBe(expected.finished_perimeter_cm);

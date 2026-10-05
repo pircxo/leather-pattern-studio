@@ -1,0 +1,25 @@
+{
+  "name": "leather-pattern-studio",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "python3 scripts/setup.py",
+    "dev": "python3 scripts/dev.py",
+    "build": "npm --prefix apps/web run build",
+    "test": "npm --prefix packages/ui test && npm --prefix apps/web test",
+    "test:api": "apps/api/.venv/bin/python -m pytest apps/api/tests",
+    "test:e2e": "playwright test",
+    "format": "prettier --write apps/web/src packages/ui/src scripts/*.mjs e2e playwright.config.ts *.json",
+    "format:check": "prettier --check apps/web/src packages/ui/src scripts/*.mjs e2e playwright.config.ts *.json",
+    "screenshots": "node scripts/capture.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "@axe-core/playwright": "^4.11.0",
+    "prettier": "^3.8.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

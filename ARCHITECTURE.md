@@ -1,171 +1,79 @@
-# Architecture notes
+# Architecture
 
-This document exists for two overlapping reasons: it's the real design
-log for this project, and it's organised around the specific questions
-Canonical's written interview asks about web engineering and software
-engineering experience, so I can point at concrete decisions instead of
-answering those questions in the abstract.
+Leather Pattern Studio separates interactive drafting, authoritative geometry/persistence, and export rendering. The project is designed as a complete workshop workflow with a low-friction local demo and a separate service stack.
 
-## System shape, and why it's several small services instead of one app
+```text
+React + TypeScript ── REST ── FastAPI ── RQ queue ── Export worker
+       │                       │                       │
+       │                       └──── SQLAlchemy ───────┘
+       │                          PostgreSQL / SQLite
+       │                                               │
+       └── Live SVG preview                    SVG + tiled PDF files
 
-```
-apps/web (React+TS) --REST--> apps/api (FastAPI) --enqueue--> apps/worker (RQ)
-                                    |                                |
-                                    v                                v
-                              Postgres/SQLite                  exports/*.svg,*.pdf
-apps/mobile_flutter (Flutter) --REST------------------------------^
+Flutter companion ── same REST API ── saved pattern + SVG
 ```
 
-`apps/api` and `apps/worker` are separate processes (separate containers,
-in `docker-compose.yml`) that share no code of their own — both depend
-on `packages/core_py`, a small shared domain package with the geometry
-engine, the ORM models, and the one background job (`export_job`).
-Neither imports the other directly. The API never generates a PDF on the
-request thread; it writes a row and enqueues a job, and returns. The
-worker never serves HTTP; it drains a Redis queue and writes files plus
-a status column.
+## Boundaries
 
-Why split it at all, for a project this small? Because the two things
-genuinely have different failure modes and different scaling needs: the
-API needs to answer in milliseconds and scale with request volume;
-export rendering is CPU/I-O bound and benefits from running more workers
-independently of request traffic (`docker compose up --scale worker=2`
-adds throughput without touching the API). Keeping them separate from
-day one, even at toy scale, means the boundary is never load-bearing on
-"this used to be fine because it was all in-process."
+`apps/web` owns interaction and client state. `packages/ui` supplies labelled native controls, keyboard behavior, focus styles and accessible colour swatches. The web app imports the UI source through a Vite alias; React is explicitly deduplicated so there is one runtime even with two package installations.
 
-**What I'd change before this served real traffic:** right now the API
-and worker share one database schema directly (`core_py.models`), not
-just a queue. That's an honest simplification for a two-person-sized
-system — at real scale, or with multiple teams owning each service, I'd
-tighten that to "the worker only ever touches the DB through the API,"
-either by having the worker call back into the API over HTTP to report
-results, or by splitting into genuinely separate databases with events
-as the only integration point. I'd rather state that trade-off than hide
-it.
+`apps/api` owns request validation, geometry recomputation, patterns and production-order transitions. Pydantic schemas define the external contract separately from the SQLAlchemy storage models. Unknown fields and nonfinite dimensions are rejected. HTTP and validation errors share one machine-readable envelope.
 
-## The duplicated geometry engine, and how it's kept honest
+`packages/core_py` is the only shared Python domain package. It contains the geometry engine, ORM models, session management and export job. `apps/worker` imports this package, not the FastAPI application. Multiple workers can consume the same queue independently.
 
-`packages/core_py/core_py/geometry.py` (Python) and
-`apps/web/src/geometry/panel.ts` (TypeScript) implement the exact same
-formulas twice, once per language. This is deliberate duplication, not
-an oversight: the web app needs to redraw the pattern instantly on every
-slider tick, and a network round trip on every tick would feel laggy;
-but the server value is what's actually stored, exported, and (in a
-real version of this product) billed, so it has to be recomputed
-independently rather than trusted from the client.
+`apps/mobile_flutter` is a read-only companion. It loads a saved pattern by ID and displays its export. It has a web entry point and can acquire native platform wrappers with Flutter's project-generation command. It does not duplicate the editor or production board.
 
-Duplicated logic drifting apart silently is a real risk, so
-`fixtures/panel-cases.json` is a small, shared, language-agnostic
-contract: a list of input/expected-output pairs. `apps/api/tests/
-test_geometry_fixture.py` and `apps/web/src/geometry/panel.test.ts` each
-load the same file and assert their own implementation against it,
-independently. Neither test calls into the other language. If someone
-changes the rounding rule in one implementation and forgets the other,
-CI fails on whichever one drifted — see `.github/workflows/ci.yml`,
-where the API, UI kit, web, and (when a Flutter SDK is available)
-mobile-companion test suites all run on every push.
+## Instant preview and authoritative geometry
 
-## Reliability: the async export path
+Python and TypeScript implement the same rounded-rectangle formulas. The client can update immediately without network requests; the API independently recomputes every value before storage. Client-generated SVG paths are never accepted as authoritative input.
 
-`apps/api/app/events.py` wraps the only call a route handler is allowed
-to make to kick off export rendering. If Redis is reachable, the job
-goes on a queue and the request returns immediately — the designed
-path. If Redis is unreachable (e.g. someone runs `apps/api` alone for a
-quick local demo, without `docker compose`), it falls back to running
-the job inline rather than failing the request. That fallback is logged
-loudly specifically so it's never mistaken for the real async path. At
-real production traffic, a failed Redis connection should alert someone,
-not silently degrade every request's latency — this fallback is a
-development-experience choice, not a reliability feature, and the
-comment in `events.py` says so.
+`fixtures/panel-cases.json` is a shared language-independent contract, consumed by both geometry test suites. It exercises cut dimensions, radius clamping, rounded areas and perimeters. Separate tests reject invalid and nonfinite inputs.
 
-`core_py.jobs.export_job` is written to be safely re-run: it always
-recomputes geometry from the stored parameters and overwrites whatever a
-previous, possibly-crashed attempt left on disk, and it catches its own
-exceptions to mark the pattern `failed` rather than let a bad render take
-the whole worker process down.
+This duplication is a deliberate maintenance cost. The fixture checks the agreed numerical outputs; it does not claim to prove every possible floating-point input identical across languages. The editor uses millimetre inputs with 0.1 mm steps, and displayed dimensions and summary metrics are rounded to two decimal places.
 
-## Maintainability
+## Saved patterns and production history
 
-A few choices that are specifically about keeping this changeable later,
-not about making it work today:
+Saved patterns are immutable. Reopening copies their parameters into the editor; saving creates a new record. Orders continue referencing the original pattern, so changing a draft cannot silently change a production job.
 
-- **Pydantic schemas are separate from SQLAlchemy models**
-  (`apps/api/app/schemas.py` vs. `core_py/models.py`). The public API
-  contract and the storage shape are allowed to diverge — e.g. storage
-  could denormalise something for a query, or the API could hide an
-  internal column — without that becoming a breaking API change.
-- **The UI kit (`packages/ui`) centralises design tokens** (colours,
-  spacing, the focus ring) in one CSS file. Changing a brand colour is a
-  one-line change, not a grep-and-replace across every screen — this is
-  the same reasoning behind Canonical's own Vanilla Framework existing
-  as a shared layer instead of every product re-deriving its own styles.
-- **Native controls over custom ARIA widgets, by default.** The slider
-  is a real `<input type="range">`, the colour picker is real
-  `<input type="radio">` elements visually styled as swatches, not
-  `role="slider"` or `role="radio"` divs with hand-written keyboard
-  handlers. Every one of those native elements already has correct
-  keyboard support and screen-reader semantics; re-implementing that by
-  hand is a common source of subtly broken accessibility, and it's more
-  code to maintain for a worse result.
+Patterns with orders cannot be deleted. Patterns still exporting cannot be deleted either. Completed unreferenced patterns can be removed, with an explicit confirmation in the UI; their export files are then removed. This is a focused alternative to implementing revision tables and audit logs for a small workshop.
 
-## Performance
+Order status transitions are enforced by the API: received → in production → shipped. Moving to the current status is idempotent; backwards and skipped transitions fail. Production requires ready cutting exports.
 
-For a project at this scale, the performance decisions that matter are
-less about micro-optimisation and more about not doing unnecessary work
-in the first place:
+## Export lifecycle and recovery
 
-- Geometry is O(1) arithmetic — generating a pattern preview is bounded
-  by React's render, not by computation, so the slider stays responsive
-  at 60fps without memoisation tricks (though `App.tsx` does memoise the
-  panel computation with `useMemo` so a slider drag doesn't recompute on
-  every unrelated re-render).
-- The pattern is rendered as actual SVG, not a rasterised image, so it
-  stays crisp at any zoom and the browser never has to re-request a
-  higher-resolution bitmap.
-- The slow part of the system (rendering a print-quality PDF) is
-  explicitly moved off the request path and onto a worker that can be
-  scaled independently — see "Reliability" above. That's the real lever
-  for keeping the product fast under load: not making the slow thing
-  faster, but making sure it never blocks something that needs to be
-  fast.
-- At real scale, the next performance work I'd do is adding database
-  indexes once query patterns are known (none are needed yet — the
-  tables are tiny) and adding HTTP caching headers to the SVG/PDF export
-  endpoints, which never change once `export_status` is `ready`.
+The API persists a pattern as pending, then dispatches `core_py.jobs.export_job`. The job commits processing status before rendering, recomputes geometry from saved inputs, writes SVG/PDF files to temporary files, atomically replaces the final paths, and commits ready status. Rendering failures leave a failed status and an error, which the UI can retry.
 
-## Quality practices used in this repo
+Three dispatch modes support different environments:
 
-- **A real test suite per service**, not just happy-path smoke tests:
-  input validation (negative dimensions, blank names), 404s, the async
-  fallback path, and a dedicated accessibility test (`jest-axe`) per
-  interactive UI component — 23 Python tests, 21 TypeScript/React tests
-  (15 in the UI kit, 6 in the web app), plus Flutter widget tests for
-  the companion app.
-- **The cross-language fixture** (above) is a lightweight form of
-  contract testing between two independently-maintained implementations
-  of the same business logic.
-- **CI runs every suite on every push** (`.github/workflows/ci.yml`),
-  including a dedicated accessibility check job — accessibility bugs are
-  caught the same way any other regression is, automatically, not left
-  to manual review.
-- **Honesty about scope.** The `README.md` "Status" section says
-  plainly what this MVP does and doesn't cover (panel shapes beyond
-  rounded rectangles; a deeper Flutter app; auth) instead of implying a
-  bigger surface than what's actually built and tested. I'd rather ship
-  a smaller thing that's fully true than a bigger one with gaps I'm
-  hoping nobody asks about.
+- `inline`: local demos and deterministic tests; no Redis needed.
+- `queued`: Compose; queue outages mark the saved pattern failed for a later retry.
+- `auto`: API default; try Redis and fall back to inline if unavailable.
 
-## Open source framing
+The frontend polls while its visible patterns or latest saved pattern are pending/processing. Requests are cancelled when their query or page changes; stale responses do not overwrite a newer library result. If the forked process running a job dies, the worker marks the pattern failed so it can be retried. A worker stopped after accepting a job leaves it pending until workers resume; recovering lost queues remains an operations concern, not a guarantee of this implementation.
 
-This started as a closed, internal tool for my own leather-goods
-business (My Star Georgia) and is published here under the MIT license
-specifically because the underlying problem — turning a few numbers into
-an accurate cutting pattern — is useful to other small makers, and
-because Canonical's own engineering culture (Vanilla Framework,
-react-components) treats building reusable, accessible open tooling as
-part of the job, not a side project. `CONTRIBUTING.md` sets out the
-ground rules I'd want from a contributor: tests travel with code,
-accessibility is not optional for new interactive components, and PRs
-stay small.
+## Printable templates
+
+SVG exports have physical millimetre dimensions, escaped labels, a cut outline, dashed stitch guide and a calibration line. PDF exports are tiled at actual scale onto A4. Each sheet has a 190 × 250 mm drawing frame; adjacent tiles overlap by 10 mm. A 2 mm padding around the complete pattern prevents clipping strokes on the outer edge.
+
+Each page identifies its row and column, page number, dimensions, assembly instructions and a 50 mm calibration ruler. Large panels gain pages instead of being shrunk or clipped. Tests check tile counts, A4 page sizes, scale instructions and valid PDF responses. Printer settings still matter: actual size / 100% and a physical ruler check are part of the intended workflow.
+
+## Persistence and serving
+
+The local runner uses an absolute SQLite path and an absolute export directory, and starts/stops both services together. Browser tests use completely separate temporary storage and ports.
+
+Compose uses PostgreSQL and persistent export/database volumes. The web image builds the frontend with Node and serves only built assets with Nginx. `/api` is proxied to FastAPI on the same origin. The worker waits for its database to be available. CORS is explicit and configurable for separate clients.
+
+The database currently creates its schema on startup. There are no schema migrations because this release preserves the original table shapes. A future persisted-schema change should introduce migrations before changing deployed databases.
+
+## Quality and CI
+
+- Pytest: geometry contracts, validation/errors, persistence, export jobs, tiled PDF output, pagination, literal search, deletion guards and order transitions.
+- Vitest + Testing Library: native controls, axe accessibility checks, preview/presets, error states, saving/reopening, draft recovery and deletion confirmation.
+- Playwright: real create/download/reopen/order/ship workflows at desktop and phone sizes; keyboard entry, validation, layout overflow and WCAG checks.
+- Flutter: widget tests, API handling, static analysis and a web build.
+- Docker smoke test: build the stack, create a pattern through the Nginx proxy, wait for the separate worker and download both exports.
+- TypeScript production build, Prettier checks and Ruff checks.
+
+## Deliberate limits
+
+This is a shared/local workshop app, not a multi-tenant SaaS product. It has no accounts, payment processing or shipping integration. Rectangular-family panels are supported; complete multi-piece products and irregular shapes are outside this release. Offset pagination is sufficient here; cursor pagination and indexes would be justified by a larger dataset. The API and worker share a database schema and export volume, trading deployment simplicity for tighter coupling.

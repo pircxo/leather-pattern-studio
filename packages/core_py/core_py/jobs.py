@@ -12,6 +12,7 @@ dependency on the FastAPI app at all.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import tempfile
 
@@ -25,59 +26,105 @@ from .models import ExportStatus, Pattern
 
 logger = logging.getLogger("lps.jobs")
 
-EXPORTS_DIR = os.environ.get(
-    "EXPORTS_DIR", os.path.join(tempfile.gettempdir(), "lps-exports")
-)
+EXPORTS_DIR = os.environ.get("EXPORTS_DIR", os.path.join(tempfile.gettempdir(), "lps-exports"))
+
+
+TILE_WIDTH_MM = 190
+TILE_HEIGHT_MM = 250
+TILE_OVERLAP_MM = 10
+
+
+def tile_layout(panel: geometry.PanelResult) -> tuple[int, int]:
+    """Include 2mm padding around the knife line so strokes are never clipped."""
+    cols = max(
+        1, math.ceil((panel.cut_width_mm + 4 - TILE_OVERLAP_MM) / (TILE_WIDTH_MM - TILE_OVERLAP_MM))
+    )
+    rows = max(
+        1,
+        math.ceil((panel.cut_height_mm + 4 - TILE_OVERLAP_MM) / (TILE_HEIGHT_MM - TILE_OVERLAP_MM)),
+    )
+    return cols, rows
 
 
 def _write_pdf(panel: geometry.PanelResult, out_path: str, label: str) -> None:
+    """Tile at 1:1 scale onto A4, with overlap, assembly coordinates and a ruler."""
     c = canvas.Canvas(out_path, pagesize=A4)
-    page_w, page_h = A4
-    margin = 20 * mm
-
-    c.setFont("Helvetica", 10)
-    c.drawString(margin, page_h - margin + 4 * mm, f"Leather Pattern Studio — {label}")
-    c.setFont("Helvetica", 7)
-    c.drawString(
-        margin,
-        page_h - margin,
-        f"Finished {panel.finished_width_mm}x{panel.finished_height_mm}mm   "
-        f"Seam allowance {panel.seam_allowance_mm}mm   "
-        f"Cut size {panel.cut_width_mm}x{panel.cut_height_mm}mm",
-    )
-
-    # Origin for the drawing, below the header text.
-    origin_x = margin
-    origin_y = page_h - margin - 10 * mm - panel.cut_height_mm * mm
-
-    c.setStrokeColorRGB(0.1, 0.1, 0.1)
-    c.setLineWidth(0.6)
-    c.roundRect(
-        origin_x,
-        origin_y,
-        panel.cut_width_mm * mm,
-        panel.cut_height_mm * mm,
-        panel.cut_corner_radius_mm * mm,
-        stroke=1,
-        fill=0,
-    )
-
-    c.setStrokeColorRGB(0.71, 0.33, 0.18)
-    c.setDash(2, 1.5)
-    c.setLineWidth(0.4)
-    inset = panel.seam_allowance_mm * mm
-    c.roundRect(
-        origin_x + inset,
-        origin_y + inset,
-        panel.finished_width_mm * mm,
-        panel.finished_height_mm * mm,
-        panel.finished_corner_radius_mm * mm,
-        stroke=1,
-        fill=0,
-    )
-
-    c.showPage()
+    c.setTitle(f"Leather Pattern Studio - {label}")
+    cols, rows = tile_layout(panel)
+    for row in range(rows):
+        for col in range(cols):
+            c.setFillColorRGB(1, 1, 1)
+            c.rect(0, 0, *A4, fill=1, stroke=0)
+            c.setFillColorRGB(0.1, 0.1, 0.1)
+            c.setFont("Helvetica-Bold", 10)
+            title = f"Leather Pattern Studio - {label}"
+            while c.stringWidth(title, "Helvetica-Bold", 10) > 190 * mm:
+                title = title[:-4] + "..."
+            c.drawString(10 * mm, 285 * mm, title)
+            c.setFont("Helvetica", 7)
+            c.drawString(
+                10 * mm,
+                279 * mm,
+                f"Cut {panel.cut_width_mm:g} x {panel.cut_height_mm:g} mm | "
+                f"Seam {panel.seam_allowance_mm:g} mm | "
+                f"Row {row + 1}/{rows}, column {col + 1}/{cols}",
+            )
+            x, y, w, h = 10 * mm, 25 * mm, TILE_WIDTH_MM * mm, TILE_HEIGHT_MM * mm
+            c.setStrokeColorRGB(0.7, 0.7, 0.7)
+            c.setLineWidth(0.25)
+            c.rect(x, y, w, h)
+            c.saveState()
+            clip = c.beginPath()
+            clip.rect(x, y, w, h)
+            c.clipPath(clip, stroke=0)
+            origin_x = x + (2 - col * (TILE_WIDTH_MM - TILE_OVERLAP_MM)) * mm
+            origin_y = (
+                y + h - (2 + panel.cut_height_mm - row * (TILE_HEIGHT_MM - TILE_OVERLAP_MM)) * mm
+            )
+            c.setStrokeColorRGB(0.1, 0.1, 0.1)
+            c.setLineWidth(0.4 * mm)
+            c.roundRect(
+                origin_x,
+                origin_y,
+                panel.cut_width_mm * mm,
+                panel.cut_height_mm * mm,
+                panel.cut_corner_radius_mm * mm,
+                stroke=1,
+                fill=0,
+            )
+            c.setStrokeColorRGB(0.55, 0.25, 0.13)
+            c.setDash(2 * mm, 1.5 * mm)
+            c.setLineWidth(0.3 * mm)
+            inset = panel.seam_allowance_mm * mm
+            c.roundRect(
+                origin_x + inset,
+                origin_y + inset,
+                panel.finished_width_mm * mm,
+                panel.finished_height_mm * mm,
+                panel.finished_corner_radius_mm * mm,
+                stroke=1,
+                fill=0,
+            )
+            c.restoreState()
+            c.setStrokeColorRGB(0.1, 0.1, 0.1)
+            c.setLineWidth(0.5)
+            c.line(10 * mm, 14 * mm, 60 * mm, 14 * mm)
+            for tick in range(6):
+                tx = (10 + tick * 10) * mm
+                c.line(tx, 12 * mm, tx, 16 * mm)
+            c.setFont("Helvetica", 7)
+            c.drawString(10 * mm, 8 * mm, "50 mm scale check - print at 100% / actual size")
+            c.drawRightString(200 * mm, 15 * mm, f"Page {row * cols + col + 1} of {rows * cols}")
+            c.drawRightString(
+                200 * mm, 8 * mm, "Trim frame; align the 10 mm overlap between sheets"
+            )
+            c.showPage()
     c.save()
+
+
+def _write_svg(panel: geometry.PanelResult, path: str, label: str) -> None:
+    with open(path, "w", encoding="utf-8") as stream:
+        stream.write(geometry.render_panel_svg(panel, label=label))
 
 
 def export_job(pattern_id: int) -> None:
@@ -93,7 +140,7 @@ def export_job(pattern_id: int) -> None:
             return
 
         pattern.export_status = ExportStatus.PROCESSING.value
-        db.flush()
+        db.commit()
 
         try:
             panel = geometry.generate_panel(
@@ -106,10 +153,19 @@ def export_job(pattern_id: int) -> None:
             svg_path = os.path.join(EXPORTS_DIR, f"pattern-{pattern_id}.svg")
             pdf_path = os.path.join(EXPORTS_DIR, f"pattern-{pattern_id}.pdf")
 
-            with open(svg_path, "w", encoding="utf-8") as f:
-                f.write(geometry.render_panel_svg(panel, label=pattern.name))
-
-            _write_pdf(panel, pdf_path, label=pattern.name)
+            # Atomic replacements prevent clients seeing a partially written export.
+            for target, render in (
+                (svg_path, lambda path: _write_svg(panel, path, pattern.name)),
+                (pdf_path, lambda path: _write_pdf(panel, path, pattern.name)),
+            ):
+                fd, temporary = tempfile.mkstemp(dir=EXPORTS_DIR)
+                os.close(fd)
+                try:
+                    render(temporary)
+                    os.replace(temporary, target)
+                finally:
+                    if os.path.exists(temporary):
+                        os.remove(temporary)
 
             pattern.svg_export_path = svg_path
             pattern.pdf_export_path = pdf_path
@@ -119,3 +175,15 @@ def export_job(pattern_id: int) -> None:
             logger.exception("export_job failed for pattern %s", pattern_id)
             pattern.export_status = ExportStatus.FAILED.value
             pattern.export_error = str(exc)
+
+
+def mark_export_failed(pattern_id: int, message: str) -> None:
+    """Record a failure that happened outside `export_job` itself — e.g. the
+    worker process running it was killed — so the pattern doesn't sit in
+    `pending`/`processing` forever and can be retried from the library."""
+    with session_scope() as db:
+        pattern = db.get(Pattern, pattern_id)
+        if pattern is None or pattern.export_status == ExportStatus.READY.value:
+            return
+        pattern.export_status = ExportStatus.FAILED.value
+        pattern.export_error = message
